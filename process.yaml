@@ -1,5 +1,5 @@
 name: market-gap-foundry
-version: "0.1.0"
+version: "0.2.0"
 schema_version: 2
 description: >
   End-to-end market gap discovery and market-creation workflow. Takes a market
@@ -16,7 +16,7 @@ persona: |
   nonconsumption barriers, and practical market entry wedges. Separate facts
   from assumptions, quantify uncertainty, and make falsifiable recommendations.
 
-phase_mode: guided
+phase_mode: strict
 
 tool_guidance: |
   Use CSV for all structured datasets and markdown for narrative outputs.
@@ -215,10 +215,13 @@ tests:
       - web_search
       - web_fetch
       - mgap_signal_harvester
+      - mgap_gap_scorer
+      - mgap_errc_builder
+      - mgap_validation_planner
 
 verification:
   policy:
-    mode: llm_first
+    mode: static_first
     static_checks:
       tool_success_policy: safety_integrity_only
       file_integrity_policy: enforce_nonempty_changed_files
@@ -244,6 +247,7 @@ verification:
         - coverage_gaps
         - evidence_quality
         - top_gap_count
+        - skipped_records
     outcome_policy:
       pass_states: [pass, pass_with_warnings, partial_verified]
       fail_states: [fail]
@@ -290,6 +294,25 @@ verification:
       severity: error
       type: llm
       applies_to_phases: [score-gaps]
+    - name: scorecard-fields-complete
+      description: "Gap scorecard rows must include all required scoring fields"
+      check: >
+        Validate that each row in gap-scorecard.csv has explicit numeric values
+        for demand_intensity, pain_severity, incumbent_coverage, access_barrier,
+        switching_friction, willingness_to_pay_signal, evidence_confidence, and
+        a final rankable score.
+      severity: error
+      type: llm
+      applies_to_phases: [score-gaps]
+    - name: source-index-quality
+      description: "source-index.csv must include source type, URL, and access date"
+      check: >
+        Confirm source-index.csv provides source_type, source_url, and access
+        date markers for each source used in major claims. Flag missing URLs or
+        missing/ambiguous dates.
+      severity: error
+      type: llm
+      applies_to_phases: [collect-signals, score-gaps, validation-plan]
     - name: errc-actionability
       description: "ERRC outputs must be specific and actionable"
       check: >
@@ -474,10 +497,12 @@ prompt_contracts:
   executor_constraints: |
     Distinguish facts from assumptions. Keep rankings deterministic and
     explainable. Every top gap must connect to a named barrier in
-    nonconsumption-map.csv.
+    nonconsumption-map.csv. Never require API keys, credentials, or private
+    data access to proceed.
   verifier_constraints: |
     Treat vague strategic advice as insufficient. Prefer specific and testable
-    outputs with explicit thresholds.
+    outputs with explicit thresholds. Treat missing scorecard fields or missing
+    source dates/URLs as blocking defects.
   remediation_instructions: |
     When checks fail, repair only failing sections with targeted edits and keep
     existing validated evidence intact.
