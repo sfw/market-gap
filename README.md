@@ -1,52 +1,116 @@
-# market-gap-foundry
+# Market Gap Foundry for Loom
 
-Loom process package for this question:
+A Loom process package that turns a market input into a production-grade
+gap-discovery and market-creation workflow.
+
+It is designed around this principle:
 
 > "Find a gap in the market, and make a market in the gap."
 
-The package takes a market definition as input and produces:
+## What it does
 
-- Ranked market gaps with deterministic scoring
-- ERRC-based market-creation plays for top gaps
-- A falsifiable 30/60/90-day validation plan
+This package runs a strict 7-phase process:
 
-## Files
+1. frame-market
+2. map-jobs-and-nonconsumption
+3. collect-signals
+4. map-supply
+5. score-gaps
+6. design-market-plays
+7. validation-plan
 
-- `process.yaml` — Loom process contract (schema v2)
-- `tools/mgap_signal_harvester.py` — no-key public signal collection
-- `tools/mgap_gap_scorer.py` — deterministic gap scoring and ranking
-- `tools/mgap_errc_builder.py` — ERRC/action design helpers
-- `tools/mgap_validation_planner.py` — experiment and threshold planning
+Core outputs:
 
-## Install
+- deterministic ranked market gaps
+- ERRC-based market-creation plays
+- falsifiable 30/60/90 experiment plans with scale/iterate/kill thresholds
+
+## Credentials and APIs
+
+This package does not require API keys, account credentials, or private
+integrations.
+
+Bundled tools use public/no-auth sources and local deterministic logic:
+
+- `mgap_signal_harvester`
+- `mgap_gap_scorer`
+- `mgap_errc_builder`
+- `mgap_validation_planner`
+
+## Installation
+
+`loom install` supports local paths and GitHub sources.
+
+Install from GitHub (full URL):
+
+```bash
+loom install https://github.com/sfw/market-gap
+```
+
+Install from GitHub (shorthand):
+
+```bash
+loom install sfw/market-gap
+```
+
+Install from a local path:
 
 ```bash
 loom install /absolute/path/to/market-gap
 ```
 
-## Run
+Install into a specific workspace:
+
+```bash
+loom install /absolute/path/to/market-gap -w /path/to/project
+```
+
+## Usage
+
+Interactive:
 
 ```bash
 loom -w /path/to/workspace --process market-gap-foundry
 ```
 
-Example goal input:
+Example run goal:
 
 ```text
 Find gaps in the US SMB payroll software market and propose market-creation plays.
 ```
 
+Non-interactive:
+
+```bash
+loom run "Find gaps in the US SMB payroll software market and propose market-creation plays." \
+  --workspace /path/to/workspace \
+  --process market-gap-foundry
+```
+
 ## Deliverables
 
-Primary outputs include:
+Selected key deliverables:
 
+- `gap-register.csv`
 - `gap-scorecard.csv`
 - `top-gap-shortlist.md`
 - `market-playbook.md`
 - `errc-grid.csv`
+- `wedge-offers.csv`
+- `experiment-backlog.csv`
 - `validation-plan-30-60-90.md`
+- `decision-thresholds.md`
 
-## Notes
+## Testing
 
-- No custom tool in this package requires API keys or credentials.
-- External data collection uses public endpoints only.
+Run package tests:
+
+```bash
+loom process test .
+```
+
+Run this repo's Python regression tests:
+
+```bash
+PYTHONPATH=/Users/sfw/Development/loom/src python3 -m unittest discover -s tests -p 'test_*.py'
+```
