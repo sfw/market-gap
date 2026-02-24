@@ -1,0 +1,483 @@
+name: market-gap-foundry
+version: "0.1.0"
+schema_version: 2
+description: >
+  End-to-end market gap discovery and market-creation workflow. Takes a market
+  definition as input, finds underserved demand and nonconsumption patterns,
+  scores opportunity gaps, and converts top gaps into actionable market
+  creation plays with a 30/60/90-day validation plan.
+author: "SFW"
+tags: [market-gap, market-creation, jtbd, blue-ocean, strategy, innovation]
+
+persona: |
+  You are a senior market-creation strategist. You do not stop at identifying
+  "interesting gaps"; you convert each priority gap into an evidence-backed
+  thesis for creating new demand. Focus on unmet jobs-to-be-done,
+  nonconsumption barriers, and practical market entry wedges. Separate facts
+  from assumptions, quantify uncertainty, and make falsifiable recommendations.
+
+phase_mode: guided
+
+tool_guidance: |
+  Use CSV for all structured datasets and markdown for narrative outputs.
+  Use mgap_signal_harvester for no-key public signal collection, mgap_gap_scorer
+  for deterministic ranking, mgap_errc_builder for ERRC design, and
+  mgap_validation_planner for testable 30/60/90 plans.
+  When external evidence is used, include source URL and access date in
+  source-index.csv.
+
+tools:
+  guidance: >
+    Prefer mgap_* tools for deterministic scoring/planning, and use web_search /
+    web_fetch to fill evidence gaps from primary public sources.
+  required:
+    - web_search
+    - web_fetch
+    - spreadsheet
+    - calculator
+    - read_file
+    - write_file
+    - document_write
+    - search_files
+    - mgap_signal_harvester
+    - mgap_gap_scorer
+    - mgap_errc_builder
+    - mgap_validation_planner
+  excluded:
+    - delete_file
+    - shell_execute
+    - git_command
+
+phases:
+  - id: frame-market
+    description: >
+      Normalize the market definition: customer segments, use cases, scope
+      boundaries, geographies, and objective function for this run.
+    depends_on: []
+    model_tier: 2
+    verification_tier: 2
+    is_critical_path: true
+    acceptance_criteria: >
+      Scope is explicit and bounded. At least three segment definitions and
+      one clear out-of-scope list are documented.
+    deliverables:
+      - "market-scope.md — market definition, boundaries, and assumptions"
+      - "segmentation-map.csv — segment list with needs, context, and priority"
+      - "problem-framing.md — strategic question, success criteria, and constraints"
+
+  - id: map-jobs-and-nonconsumption
+    description: >
+      Identify core jobs-to-be-done by segment and map where nonconsumption
+      exists due to access, skill, time, trust, or affordability barriers.
+    depends_on: [frame-market]
+    model_tier: 3
+    verification_tier: 2
+    is_critical_path: true
+    acceptance_criteria: >
+      At least five jobs and five nonconsumption barriers are mapped with
+      segment-level context and evidence notes.
+    deliverables:
+      - "jobs-map.csv — segment-by-job map with importance and current workaround"
+      - "nonconsumption-map.csv — who is not consuming and why"
+      - "barrier-taxonomy.md — barrier classes, root causes, and implications"
+
+  - id: collect-signals
+    description: >
+      Gather demand, macro, and behavior signals from no-key public sources and
+      create a source-indexed evidence base with recency markers.
+    depends_on: [map-jobs-and-nonconsumption]
+    model_tier: 2
+    verification_tier: 2
+    is_critical_path: true
+    acceptance_criteria: >
+      Signal set covers at least three source types and includes recency/date
+      tags for major claims.
+    deliverables:
+      - "demand-signals.csv — demand and pain signals with source attribution"
+      - "macro-indicators.csv — macro/context indicators relevant to demand"
+      - "source-index.csv — source registry with URLs, dates, and scope tags"
+
+  - id: map-supply
+    description: >
+      Map incumbent and substitute supply: offerings, pricing, access model,
+      channel strategy, and value curve baseline.
+    depends_on: [frame-market]
+    model_tier: 2
+    verification_tier: 2
+    is_critical_path: true
+    acceptance_criteria: >
+      Competitor/substitute map is complete for priority segments and includes
+      pricing/access comparison plus baseline value curve factors.
+    deliverables:
+      - "competitor-map.csv — incumbents, substitutes, and segment coverage"
+      - "value-curve-baseline.csv — baseline factor scores for existing offers"
+      - "pricing-access-grid.csv — pricing, packaging, and accessibility comparison"
+
+  - id: score-gaps
+    description: >
+      Build gap hypotheses and rank them using deterministic scoring over
+      demand intensity, pain severity, incumbent coverage, access barriers,
+      adoption feasibility, willingness-to-pay, and confidence.
+    depends_on: [collect-signals, map-supply]
+    model_tier: 3
+    verification_tier: 2
+    is_critical_path: true
+    acceptance_criteria: >
+      Each ranked gap has traceable evidence links, score rationale, and
+      confidence classification.
+    deliverables:
+      - "gap-register.csv — candidate gap hypotheses with evidence references"
+      - "gap-scorecard.csv — deterministic scores, confidence, and ranking"
+      - "top-gap-shortlist.md — top opportunities with rationale and caveats"
+
+  - id: design-market-plays
+    description: >
+      Convert top gaps into market-creation plays using ERRC (eliminate/reduce/
+      raise/create), wedge offer design, and value curve shifts.
+    depends_on: [score-gaps]
+    model_tier: 3
+    verification_tier: 2
+    is_critical_path: true
+    acceptance_criteria: >
+      Each top gap has an ERRC grid, wedge offer, and value network assumptions
+      tied to the nonconsumption barrier addressed.
+    deliverables:
+      - "market-playbook.md — market-creation plays for top gaps"
+      - "errc-grid.csv — eliminate/reduce/raise/create by selected gap"
+      - "wedge-offers.csv — entry offer, target segment, and adoption mechanism"
+
+  - id: validation-plan
+    description: >
+      Produce a 30/60/90-day validation plan with experiments, metrics,
+      thresholds, and explicit scale/iterate/kill decision rules.
+    depends_on: [design-market-plays]
+    model_tier: 3
+    verification_tier: 2
+    is_critical_path: true
+    is_synthesis: true
+    acceptance_criteria: >
+      Experiment plan is falsifiable, has clear thresholds, and maps each test
+      to a specific high-risk assumption in the market-play thesis.
+    deliverables:
+      - "experiment-backlog.csv — experiments by phase, owner, and metric"
+      - "validation-plan-30-60-90.md — phased validation narrative and milestones"
+      - "decision-thresholds.md — scale/iterate/kill thresholds and triggers"
+
+tests:
+  - id: smoke
+    mode: deterministic
+    goal: "Run market-gap-foundry and produce all declared deliverables."
+    timeout_seconds: 900
+    acceptance:
+      phases:
+        must_include:
+          - frame-market
+          - map-jobs-and-nonconsumption
+          - collect-signals
+          - map-supply
+          - score-gaps
+          - design-market-plays
+          - validation-plan
+      deliverables:
+        must_exist:
+          - market-scope.md
+          - segmentation-map.csv
+          - problem-framing.md
+          - jobs-map.csv
+          - nonconsumption-map.csv
+          - barrier-taxonomy.md
+          - demand-signals.csv
+          - macro-indicators.csv
+          - source-index.csv
+          - competitor-map.csv
+          - value-curve-baseline.csv
+          - pricing-access-grid.csv
+          - gap-register.csv
+          - gap-scorecard.csv
+          - top-gap-shortlist.md
+          - market-playbook.md
+          - errc-grid.csv
+          - wedge-offers.csv
+          - experiment-backlog.csv
+          - validation-plan-30-60-90.md
+          - decision-thresholds.md
+      verification:
+        forbidden_patterns:
+          - "Expected deliverable '.*' not found"
+          - "\\[TBD\\]|\\[TODO\\]|\\[INSERT\\]|\\[PLACEHOLDER\\]|XX%|N/A"
+
+  - id: live-canary
+    mode: live
+    goal: "Find and rank gaps in a real market, then produce market-creation plays."
+    timeout_seconds: 1200
+    requires_network: true
+    requires_tools:
+      - web_search
+      - web_fetch
+      - mgap_signal_harvester
+
+verification:
+  policy:
+    mode: llm_first
+    static_checks:
+      tool_success_policy: safety_integrity_only
+      file_integrity_policy: enforce_nonempty_changed_files
+      syntax_policy: enforce_parseable_artifacts
+      deliverable_existence_policy: enforce_declared_deliverables
+    semantic_checks:
+      - id: process-rules
+        check: "Apply process-defined verification rules and acceptance criteria."
+        severity: error
+        enforcement: hard
+        scope: phase
+    output_contract:
+      required_fields:
+        - passed
+        - outcome
+        - reason_code
+        - severity_class
+        - confidence
+        - feedback
+        - issues
+        - metadata
+      metadata_fields:
+        - coverage_gaps
+        - evidence_quality
+        - top_gap_count
+    outcome_policy:
+      pass_states: [pass, pass_with_warnings, partial_verified]
+      fail_states: [fail]
+  remediation:
+    strategies:
+      - id: targeted-remediation
+        retry_strategy: unconfirmed_data
+        description: "Address failing checks with minimal targeted edits."
+    default_strategy: targeted-remediation
+    critical_path_behavior: block
+    retry_budget:
+      max_attempts: 2
+    transient_retry_policy:
+      retry_on_transient: true
+  rules:
+    - name: no-placeholders
+      description: "No placeholder text in deliverables"
+      check: "\\[TBD\\]|\\[TODO\\]|\\[INSERT\\]|\\[PLACEHOLDER\\]|XX%|N/A"
+      severity: error
+      type: regex
+      target: deliverables
+      enforcement: hard
+      applies_to_phases: ["*"]
+    - name: nonconsumption-explicit
+      description: "Top gaps and plays must explicitly name nonconsumption barriers"
+      check: >
+        Validate that opportunity framing explicitly identifies who currently
+        cannot consume and why (affordability, access, skill, time, trust, or
+        other barrier classes). Flag generic unmet-need claims without barrier
+        specificity.
+      severity: error
+      type: llm
+      applies_to_phases:
+        - map-jobs-and-nonconsumption
+        - score-gaps
+        - design-market-plays
+        - validation-plan
+    - name: score-traceability
+      description: "Gap scores must be traceable to evidence and assumptions"
+      check: >
+        Confirm each ranked gap links to concrete evidence and states key
+        assumptions and confidence. Flag scores that cannot be explained by
+        visible inputs.
+      severity: error
+      type: llm
+      applies_to_phases: [score-gaps]
+    - name: errc-actionability
+      description: "ERRC outputs must be specific and actionable"
+      check: >
+        Ensure eliminate/reduce/raise/create actions reference concrete
+        attributes, not generic advice. Each create action must map to a named
+        underserved job or barrier.
+      severity: error
+      type: llm
+      applies_to_phases: [design-market-plays]
+    - name: experiments-falsifiable
+      description: "Validation plan must have measurable thresholds and kill criteria"
+      check: >
+        Verify each key experiment has a measurable success threshold,
+        time-bound metric, and explicit scale/iterate/kill decision rule.
+      severity: error
+      type: llm
+      applies_to_phases: [validation-plan]
+    - name: recency-and-source-diversity
+      description: "Evidence should include recency markers and source diversity"
+      check: >
+        Major claims should include recency markers and should not rely on a
+        single source type. Flag stale or mono-source evidence chains.
+      severity: warning
+      type: llm
+      applies_to_phases:
+        - collect-signals
+        - score-gaps
+        - design-market-plays
+        - validation-plan
+
+memory:
+  extract_types:
+    - type: market_boundary
+      description: "Scope assumptions, segment boundaries, and out-of-scope definitions"
+    - type: unmet_job
+      description: "Customer jobs with unmet outcomes and workaround patterns"
+    - type: nonconsumption_barrier
+      description: "Barrier preventing consumption with root cause and segment context"
+    - type: gap_hypothesis
+      description: "Specific market gap with evidence and confidence"
+    - type: market_creation_play
+      description: "ERRC/wedge play hypothesis with target segment and mechanism"
+    - type: validation_signal
+      description: "Experiment signal, threshold, and decision outcome"
+  extraction_guidance: |
+    Prefer reusable decision-grade artifacts: explicit assumptions, evidence
+    quality, and threshold logic. Avoid storing generic narrative text.
+
+workspace_analysis:
+  scan_for:
+    - "*.csv — prior market datasets, surveys, pricing matrices"
+    - "*.md — existing strategy docs, interviews, and notes"
+    - "*.json — exported product analytics, support logs, or research payloads"
+    - "data/** — any local datasets usable for triangulation"
+  guidance: |
+    Reuse and cite existing workspace evidence before adding external claims.
+    If prior analysis exists, update it instead of creating disconnected outputs.
+
+planner_examples:
+  - goal: "Find market-creation gaps in US SMB accounting software."
+    subtasks:
+      - id: frame-market
+        description: "Define SMB segments, workflow boundaries, and current alternatives."
+        depends_on: []
+        model_tier: 2
+      - id: map-jobs-and-nonconsumption
+        description: "Map bookkeeping/compliance jobs and nonconsumption barriers by segment."
+        depends_on: [frame-market]
+        model_tier: 3
+      - id: collect-signals
+        description: "Collect demand and macro signals for pain intensity and urgency."
+        depends_on: [map-jobs-and-nonconsumption]
+        model_tier: 2
+      - id: map-supply
+        description: "Map incumbents/substitutes, pricing, and access constraints."
+        depends_on: [frame-market]
+        model_tier: 2
+      - id: score-gaps
+        description: "Rank candidate gaps with deterministic criteria and confidence."
+        depends_on: [collect-signals, map-supply]
+        model_tier: 3
+      - id: design-market-plays
+        description: "Design ERRC-based market-creation plays for top-ranked gaps."
+        depends_on: [score-gaps]
+        model_tier: 3
+      - id: validation-plan
+        description: "Build 30/60/90 experiment plan and decision thresholds."
+        depends_on: [design-market-plays]
+        model_tier: 3
+  - goal: "Identify underserved opportunities in home eldercare services."
+    subtasks:
+      - id: frame-market
+        description: "Define care contexts, payer segments, and geography constraints."
+        depends_on: []
+        model_tier: 2
+      - id: map-jobs-and-nonconsumption
+        description: "Map family/caregiver jobs and who cannot access services."
+        depends_on: [frame-market]
+        model_tier: 3
+      - id: collect-signals
+        description: "Gather demand and macro indicators from public no-key sources."
+        depends_on: [map-jobs-and-nonconsumption]
+        model_tier: 2
+      - id: map-supply
+        description: "Map agency, marketplace, and informal substitute options."
+        depends_on: [frame-market]
+        model_tier: 2
+      - id: score-gaps
+        description: "Prioritize gaps by pain, underserved status, and adoption feasibility."
+        depends_on: [collect-signals, map-supply]
+        model_tier: 3
+      - id: design-market-plays
+        description: "Create ERRC and wedge offers tuned for trust and affordability barriers."
+        depends_on: [score-gaps]
+        model_tier: 3
+      - id: validation-plan
+        description: "Plan low-cost experiments with strict safety and quality thresholds."
+        depends_on: [design-market-plays]
+        model_tier: 3
+  - goal: "Discover and validate gaps in B2B onboarding automation."
+    subtasks:
+      - id: frame-market
+        description: "Set segment boundaries by company size, stack maturity, and workflow."
+        depends_on: []
+        model_tier: 2
+      - id: map-jobs-and-nonconsumption
+        description: "Map onboarding jobs and identify teams excluded by setup complexity."
+        depends_on: [frame-market]
+        model_tier: 3
+      - id: collect-signals
+        description: "Collect behavioral and trend signals for friction and urgency."
+        depends_on: [map-jobs-and-nonconsumption]
+        model_tier: 2
+      - id: map-supply
+        description: "Map existing automation suites, services, and internal workarounds."
+        depends_on: [frame-market]
+        model_tier: 2
+      - id: score-gaps
+        description: "Score gap hypotheses and shortlist high-confidence opportunities."
+        depends_on: [collect-signals, map-supply]
+        model_tier: 3
+      - id: design-market-plays
+        description: "Convert top gaps into concrete ERRC and wedge plays."
+        depends_on: [score-gaps]
+        model_tier: 3
+      - id: validation-plan
+        description: "Define staged experiments and numerical go/no-go thresholds."
+        depends_on: [design-market-plays]
+        model_tier: 3
+
+replanning:
+  triggers: |
+    - Market scope is too broad to produce segment-specific output.
+    - Signal evidence is thin, stale, or contradictory for critical gaps.
+    - Top-ranked gaps fail feasibility checks after scoring.
+    - Newly discovered constraints materially change nonconsumption mapping.
+  guidance: |
+    Narrow scope to the highest-signal segment first. If evidence quality is
+    weak, reduce claims and mark uncertainty explicitly. Recompute rankings
+    when assumptions change. Do not proceed to validation-plan with unresolved
+    contradictions in score-gaps.
+
+evidence:
+  record_schema:
+    required_fields: [evidence_id, tool, source_url, created_at, quality]
+    facets: [target, entity, subject, region, category, segment, barrier_type]
+  extraction:
+    include_result_facets: true
+    arg_mappings:
+      target: [target, entity, market, segment]
+      region: [region, geography, country]
+      category: [category, theme, indicator]
+      subject: [job, pain, barrier, signal]
+  summarization:
+    max_entries: 15
+    include_facets: true
+
+prompt_contracts:
+  evidence_contract:
+    enabled: true
+    applies_to_phases: ["*"]
+  executor_constraints: |
+    Distinguish facts from assumptions. Keep rankings deterministic and
+    explainable. Every top gap must connect to a named barrier in
+    nonconsumption-map.csv.
+  verifier_constraints: |
+    Treat vague strategic advice as insufficient. Prefer specific and testable
+    outputs with explicit thresholds.
+  remediation_instructions: |
+    When checks fail, repair only failing sections with targeted edits and keep
+    existing validated evidence intact.
