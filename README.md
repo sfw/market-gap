@@ -25,6 +25,15 @@ Core outputs:
 - ERRC-based market-creation plays
 - falsifiable 30/60/90 experiment plans with scale/iterate/kill thresholds
 
+## Process contract v2
+
+This package uses Loom schema v2 process definitions with:
+
+- explicit `risk_level: medium`
+- process-level `validity_contract` for claim extraction and contradiction control
+- synthesis hardening for `validation-plan` (stricter support thresholds + recency checks)
+- an iteration loop on `validation-plan` with deterministic artifact gates
+
 ## Credentials and APIs
 
 This package does not require API keys, account credentials, or private

@@ -1,5 +1,5 @@
 name: market-gap-foundry
-version: "0.2.0"
+version: "0.3.0"
 schema_version: 2
 description: >
   End-to-end market gap discovery and market-creation workflow. Takes a market
@@ -8,6 +8,7 @@ description: >
   creation plays with a 30/60/90-day validation plan.
 author: "SFW"
 tags: [market-gap, market-creation, jtbd, blue-ocean, strategy, innovation]
+risk_level: medium
 
 persona: |
   You are a senior market-creation strategist. You do not stop at identifying
@@ -27,9 +28,6 @@ tool_guidance: |
   source-index.csv.
 
 tools:
-  guidance: >
-    Prefer mgap_* tools for deterministic scoring/planning, and use web_search /
-    web_fetch to fill evidence gaps from primary public sources.
   required:
     - web_search
     - web_fetch
@@ -47,6 +45,27 @@ tools:
     - delete_file
     - shell_execute
     - git_command
+
+validity_contract:
+  enabled: true
+  claim_extraction:
+    enabled: true
+  critical_claim_types: [numeric, date, entity_fact]
+  min_supported_ratio: 0.75
+  max_unverified_ratio: 0.25
+  max_contradicted_count: 0
+  prune_mode: rewrite_uncertainty
+  require_fact_checker_for_synthesis: false
+  final_gate:
+    enforce_verified_context_only: false
+    synthesis_min_verification_tier: 2
+    critical_claim_support_ratio: 0.95
+    temporal_consistency:
+      enabled: false
+      require_as_of_alignment: false
+      enforce_cross_claim_date_conflict_check: false
+      max_source_age_days: 0
+      as_of: ""
 
 phases:
   - id: frame-market
@@ -155,6 +174,41 @@ phases:
     verification_tier: 2
     is_critical_path: true
     is_synthesis: true
+    validity_contract:
+      min_supported_ratio: 0.8
+      max_unverified_ratio: 0.2
+      final_gate:
+        critical_claim_support_ratio: 1.0
+        temporal_consistency:
+          enabled: true
+          require_as_of_alignment: false
+          enforce_cross_claim_date_conflict_check: true
+          max_source_age_days: 730
+    iteration:
+      enabled: true
+      max_attempts: 3
+      strategy: targeted_remediation
+      stop_on_no_improvement_attempts: 1
+      max_total_runner_invocations: 4
+      max_replans_after_exhaustion: 1
+      replan_on_exhaustion: true
+      iteration_budget:
+        max_wall_clock_seconds: 600
+        max_tokens: 100000
+        max_tool_calls: 20
+      gates:
+        - id: no-placeholders
+          type: artifact_regex
+          blocking: true
+          target: deliverables
+          pattern: "\\[TBD\\]|\\[TODO\\]|\\[INSERT\\]|\\[PLACEHOLDER\\]|XX%|N/A"
+          expect_match: false
+        - id: decision-rules-present
+          type: artifact_regex
+          blocking: true
+          target: deliverables
+          pattern: "scale/iterate/kill|scale_if_gte|kill_if_lt"
+          expect_match: true
     acceptance_criteria: >
       Experiment plan is falsifiable, has clear thresholds, and maps each test
       to a specific high-risk assumption in the market-play thesis.

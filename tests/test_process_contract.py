@@ -32,6 +32,7 @@ class ProcessContractTests(unittest.TestCase):
         self.assertEqual("market-gap-foundry", self.process.name)
         self.assertEqual(2, self.process.schema_version)
         self.assertEqual("strict", self.process.phase_mode)
+        self.assertEqual("medium", self.process.risk_level)
 
     def test_verification_rules_include_hardening_checks(self) -> None:
         names = {rule.name for rule in self.process.verification_rules}
@@ -45,6 +46,30 @@ class ProcessContractTests(unittest.TestCase):
         self.assertIn("mgap_gap_scorer", required_tools)
         self.assertIn("mgap_errc_builder", required_tools)
         self.assertIn("mgap_validation_planner", required_tools)
+
+    def test_process_validity_contract_is_declared(self) -> None:
+        contract = self.process.validity_contract
+        self.assertTrue(contract.get("enabled"))
+        self.assertEqual(0, contract.get("max_contradicted_count"))
+        self.assertEqual("rewrite_uncertainty", contract.get("prune_mode"))
+        final_gate = contract.get("final_gate", {})
+        self.assertEqual(2, final_gate.get("synthesis_min_verification_tier"))
+        self.assertFalse(final_gate.get("enforce_verified_context_only"))
+
+    def test_validation_phase_has_synthesis_hardening_and_iteration(self) -> None:
+        phase = next(p for p in self.process.phases if p.id == "validation-plan")
+        contract = phase.validity_contract
+        self.assertEqual(0.8, contract.get("min_supported_ratio"))
+        self.assertEqual(0.2, contract.get("max_unverified_ratio"))
+        temporal = contract.get("final_gate", {}).get("temporal_consistency", {})
+        self.assertTrue(temporal.get("enabled"))
+        self.assertEqual(730, temporal.get("max_source_age_days"))
+
+        self.assertIsNotNone(phase.iteration)
+        assert phase.iteration is not None
+        self.assertTrue(phase.iteration.enabled)
+        self.assertEqual(3, phase.iteration.max_attempts)
+        self.assertGreaterEqual(len(phase.iteration.gates), 1)
 
 
 if __name__ == "__main__":
