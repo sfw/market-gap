@@ -110,6 +110,16 @@ Selected key deliverables:
 - `validation-plan-30-60-90.md`
 - `decision-thresholds.md`
 
+## Tool Mutation Protocol (Maintainers)
+
+When adding or upgrading bundled tools that write/modify/move/delete workspace files:
+
+- Set `is_mutating = True` on each workspace-mutating tool.
+- Return accurate workspace-relative `files_changed` on every successful mutation.
+- If targets are not under `path`, expose `mutation_target_arg_keys` (for example `output_path`, `destination`) so sealed-artifact preflight policy can resolve targets.
+- Resolve writes inside `ctx.workspace` using `_resolve_path(...)`; do not bypass workspace normalization.
+- Keep post-call guard (`execution.sealed_artifact_post_call_guard`) as defense-in-depth only (`off|warn|enforce`), and rely on preflight evidence gating + reseal metadata as primary controls.
+
 ## Testing
 
 Run package tests:
@@ -121,5 +131,5 @@ loom process test .
 Run this repo's Python regression tests:
 
 ```bash
-PYTHONPATH=/Users/sfw/Development/loom/src python3 -m unittest discover -s tests -p 'test_*.py'
+uv run pytest -q
 ```

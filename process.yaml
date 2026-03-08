@@ -1,5 +1,5 @@
 name: market-gap-foundry
-version: "0.3.0"
+version: "1.3"
 schema_version: 2
 description: >
   End-to-end market gap discovery and market-creation workflow. Takes a market
