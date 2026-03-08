@@ -36,8 +36,11 @@ for p in (ROOT, LOOM_SRC):
         sys.path.insert(0, p_str)
 
 from loom.engine.orchestrator import evidence as orchestrator_evidence  # noqa: E402
+from loom.engine.orchestrator import telemetry as orchestrator_telemetry  # noqa: E402
 from loom.engine.runner import SubtaskRunner, ToolCallRecord  # noqa: E402
 from loom.engine.runner import policy as runner_policy  # noqa: E402
+from loom.engine.runner import telemetry as runner_telemetry  # noqa: E402
+from loom.events import types as event_types  # noqa: E402
 from loom.processes.schema import ProcessLoader  # noqa: E402
 from loom.state.task_state import Task  # noqa: E402
 from loom.tools.document_write import DocumentWriteTool  # noqa: E402
@@ -80,6 +83,33 @@ PACKAGE_MUTATING_TOOL_SURFACE = [
     "move_file",
     "spreadsheet",
     "write_file",
+]
+PRE_FLIGHT_MUTATION_CASES = [
+    ("write_file", lambda relpath: {"path": relpath, "content": "mutated\n"}),
+    (
+        "document_write",
+        lambda relpath: {"path": relpath, "title": "Title", "content": "Body"},
+    ),
+    (
+        "spreadsheet",
+        lambda relpath: {
+            "operation": "create",
+            "path": relpath,
+            "headers": ["a", "b"],
+            "rows": [["1", "2"]],
+        },
+    ),
+    (
+        "edit_file",
+        lambda relpath: {"path": relpath, "old_str": "alpha", "new_str": "beta"},
+    ),
+    (
+        "move_file",
+        lambda relpath: {
+            "source": "reports/original-input.txt",
+            "destination": relpath,
+        },
+    ),
 ]
 
 
@@ -301,6 +331,61 @@ def test_output_path_writer_preflight_allowed_with_post_seal_evidence(
     assert error is None
 
 
+@pytest.mark.parametrize("tool_name,args_factory", PRE_FLIGHT_MUTATION_CASES)
+def test_preflight_blocks_all_mutating_tools_without_post_seal_evidence(
+    tool_name: str,
+    args_factory,
+    tmp_path: Path,
+) -> None:
+    relpath = f"reports/{tool_name}-sealed-target.txt"
+    task = _build_sealed_task(tmp_path, relpath)
+
+    error = SubtaskRunner._validate_sealed_artifact_mutation_policy(
+        task=task,
+        tool_name=tool_name,
+        tool_args=args_factory(relpath),
+        workspace=tmp_path,
+        is_mutating_tool=True,
+        mutation_target_arg_keys=(),
+        prior_successful_tool_calls=[],
+        current_tool_calls=[],
+    )
+
+    assert error is not None
+    assert "Sealed artifact mutation blocked" in error
+
+
+@pytest.mark.parametrize("tool_name,args_factory", PRE_FLIGHT_MUTATION_CASES)
+def test_preflight_allows_all_mutating_tools_with_post_seal_evidence(
+    tool_name: str,
+    args_factory,
+    tmp_path: Path,
+) -> None:
+    relpath = f"reports/{tool_name}-sealed-target.txt"
+    task = _build_sealed_task(tmp_path, relpath)
+    prior_calls = [
+        ToolCallRecord(
+            tool="read_file",
+            args={"path": relpath},
+            result=ToolResult.ok("fresh evidence"),
+            timestamp="2026-03-05T10:15:00",
+        ),
+    ]
+
+    error = SubtaskRunner._validate_sealed_artifact_mutation_policy(
+        task=task,
+        tool_name=tool_name,
+        tool_args=args_factory(relpath),
+        workspace=tmp_path,
+        is_mutating_tool=True,
+        mutation_target_arg_keys=(),
+        prior_successful_tool_calls=prior_calls,
+        current_tool_calls=[],
+    )
+
+    assert error is None
+
+
 def test_spreadsheet_reseal_clears_stale_seal_mismatch(tmp_path: Path) -> None:
     relpath = "competitor-pricing.csv"
     artifact = tmp_path / relpath
@@ -406,6 +491,137 @@ def test_reseal_is_tool_agnostic_for_output_path_mutations(tmp_path: Path) -> No
     assert seal["verified_origin"] is True
 
 
+@pytest.mark.parametrize("tool_name", ["write_file", "document_write", "spreadsheet", "edit_file"])
+def test_reseal_applies_for_each_workspace_mutation_tool(
+    tool_name: str,
+    tmp_path: Path,
+) -> None:
+    extension = "csv" if tool_name == "spreadsheet" else "md" if tool_name in {"document_write", "edit_file"} else "txt"
+    relpath = f"reports/{tool_name}-tracked.{extension}"
+    artifact = tmp_path / relpath
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text("alpha\n", encoding="utf-8")
+    old_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
+
+    task = Task(
+        id="task-1",
+        goal="reseal-matrix",
+        workspace=str(tmp_path),
+        metadata={
+            "artifact_seals": {
+                relpath: {
+                    "path": relpath,
+                    "sha256": old_sha,
+                    "subtask_id": "s1",
+                    "sealed_at": "2026-03-05T10:00:00",
+                },
+            },
+            "validity_scorecard": {
+                "subtask_metrics": {
+                    "s1": {"verification_outcome": "pass"},
+                },
+            },
+        },
+    )
+
+    if tool_name == "write_file":
+        tool = WriteFileTool()
+        args = {"path": relpath, "content": "beta\n"}
+    elif tool_name == "document_write":
+        tool = DocumentWriteTool()
+        args = {"path": relpath, "title": "Updated", "content": "beta"}
+    elif tool_name == "spreadsheet":
+        tool = SpreadsheetTool()
+        args = {
+            "operation": "create",
+            "path": relpath,
+            "headers": ["col"],
+            "rows": [["beta"]],
+        }
+    else:
+        tool = EditFileTool()
+        args = {"path": relpath, "old_str": "alpha", "new_str": "beta"}
+
+    result = asyncio.run(tool.execute(args, ToolContext(workspace=tmp_path)))
+    assert result.success, result.error
+    assert relpath in result.files_changed
+
+    updated = SubtaskRunner._reseal_tracked_artifacts_after_mutation(
+        task=task,
+        workspace=tmp_path,
+        tool_name=tool_name,
+        tool_args=args,
+        tool_result=result,
+        is_mutating_tool=True,
+        mutation_target_arg_keys=(),
+        subtask_id="s2",
+        tool_call_id="call-2",
+    )
+
+    assert updated == 1
+    seal = task.metadata["artifact_seals"][relpath]
+    assert seal["tool"] == tool_name
+    assert seal["sha256"] == hashlib.sha256((tmp_path / relpath).read_bytes()).hexdigest()
+    assert seal["sha256"] != old_sha
+    assert seal["previous_sha256"] == old_sha
+    assert seal["verified_origin"] is True
+
+
+def test_move_file_reseal_transfers_tracking_to_destination(tmp_path: Path) -> None:
+    source = "reports/source.txt"
+    destination = "reports/destination.txt"
+    source_path = tmp_path / source
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.write_text("alpha\n", encoding="utf-8")
+    source_sha = hashlib.sha256(source_path.read_bytes()).hexdigest()
+
+    task = Task(
+        id="task-1",
+        goal="move-reseal",
+        workspace=str(tmp_path),
+        metadata={
+            "artifact_seals": {
+                source: {
+                    "path": source,
+                    "sha256": source_sha,
+                    "subtask_id": "s1",
+                    "sealed_at": "2026-03-05T10:00:00",
+                },
+            },
+            "validity_scorecard": {
+                "subtask_metrics": {
+                    "s1": {"verification_outcome": "pass"},
+                },
+            },
+        },
+    )
+
+    tool = MoveFileTool()
+    args = {"source": source, "destination": destination}
+    result = asyncio.run(tool.execute(args, ToolContext(workspace=tmp_path)))
+    assert result.success, result.error
+
+    updated = SubtaskRunner._reseal_tracked_artifacts_after_mutation(
+        task=task,
+        workspace=tmp_path,
+        tool_name="move_file",
+        tool_args=args,
+        tool_result=result,
+        is_mutating_tool=True,
+        mutation_target_arg_keys=(),
+        subtask_id="s2",
+        tool_call_id="call-move",
+    )
+
+    assert updated == 2
+    seals = task.metadata["artifact_seals"]
+    assert source not in seals
+    assert destination in seals
+    destination_seal = seals[destination]
+    assert destination_seal["tool"] == "move_file"
+    assert destination_seal["verified_origin"] is True
+
+
 def test_backfill_artifact_seals_is_tool_agnostic(tmp_path: Path) -> None:
     task = Task(id="task-1", goal="backfill", workspace=str(tmp_path), metadata={})
     stub = _EvidenceStub(
@@ -443,6 +659,30 @@ def test_post_call_guard_mode_invalid_falls_back_to_default_off() -> None:
         SEALED_ARTIFACT_POST_CALL_GUARD="off",
     )
     assert SubtaskRunner._sealed_artifact_post_call_guard_mode(runner_stub) == "off"
+
+
+def test_sealed_event_constants_are_stable() -> None:
+    assert event_types.SEALED_POLICY_PREFLIGHT_BLOCKED == "sealed_policy_preflight_blocked"
+    assert event_types.SEALED_RESEAL_APPLIED == "sealed_reseal_applied"
+    assert (
+        event_types.SEALED_UNEXPECTED_MUTATION_DETECTED
+        == "sealed_unexpected_mutation_detected"
+    )
+
+
+def test_runner_and_orchestrator_telemetry_include_sealed_mutation_counters() -> None:
+    runner_counters = runner_telemetry.new_subtask_telemetry_counters()
+    orchestrator_rollup = orchestrator_telemetry.new_telemetry_rollup()
+
+    for key in (
+        "sealed_policy_preflight_blocked",
+        "sealed_reseal_applied",
+        "sealed_unexpected_mutation_detected",
+    ):
+        assert key in runner_counters
+        assert key in orchestrator_rollup
+        assert runner_counters[key] == 0
+        assert orchestrator_rollup[key] == 0
 
 
 def test_edit_file_regression_behavior_unchanged(tmp_path: Path) -> None:

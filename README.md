@@ -112,13 +112,46 @@ Selected key deliverables:
 
 ## Tool Mutation Protocol (Maintainers)
 
-When adding or upgrading bundled tools that write/modify/move/delete workspace files:
+Current workspace-mutating tool surface used by this package:
 
-- Set `is_mutating = True` on each workspace-mutating tool.
-- Return accurate workspace-relative `files_changed` on every successful mutation.
-- If targets are not under `path`, expose `mutation_target_arg_keys` (for example `output_path`, `destination`) so sealed-artifact preflight policy can resolve targets.
-- Resolve writes inside `ctx.workspace` using `_resolve_path(...)`; do not bypass workspace normalization.
-- Keep post-call guard (`execution.sealed_artifact_post_call_guard`) as defense-in-depth only (`off|warn|enforce`), and rely on preflight evidence gating + reseal metadata as primary controls.
+- `write_file`
+- `document_write`
+- `spreadsheet`
+- `edit_file`
+- `move_file`
+
+Bundled `mgap_*` tools are read/compute only and must remain non-mutating.
+
+Upgrade checklist for existing or new workspace-writing tools:
+
+1. Set `is_mutating = True`.
+2. Return accurate workspace-relative `files_changed` for every successful write, edit, move, or delete.
+3. If write targets are not under `path`, expose `mutation_target_arg_keys` so policy can discover targets from args metadata (for example `output_path`, `destination`, `report_path`).
+4. Normalize and constrain writes under `ctx.workspace` using `_resolve_path(...)`.
+5. Keep `execution.sealed_artifact_post_call_guard` as defense-in-depth only (`off|warn|enforce`), with preflight evidence gating + reseal/provenance as primary controls.
+
+Expected mutation result contract:
+
+```python
+@property
+def is_mutating(self) -> bool:
+    return True
+
+@property
+def mutation_target_arg_keys(self) -> tuple[str, ...]:
+    return ("output_path", "destination")
+
+async def execute(self, args: dict, ctx: ToolContext) -> ToolResult:
+    relpath = str(args.get("output_path", "")).strip()
+    # ... mutate workspace file(s) ...
+    return ToolResult.ok("updated", files_changed=[relpath])
+```
+
+Sealed-artifact protocol signals to keep stable:
+
+- `sealed_policy_preflight_blocked`
+- `sealed_reseal_applied`
+- `sealed_unexpected_mutation_detected`
 
 ## Testing
 
